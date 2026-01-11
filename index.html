@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>美女私密视频</title>
     <style>
-        /* 基础重置：减少渲染压力 */
         * {
             margin: 0;
             padding: 0;
@@ -15,88 +14,75 @@
             width: 100vw;
             height: 100vh;
             overflow: hidden;
-            background: #000; /* 黑色背景减少渲染差异 */
+            position: relative;
         }
-        /* 视频优化：适配尺寸+硬件加速，减少解码压力 */
-        #fast-video {
+        /* 视频容器铺满整个页面 */
+        #video-container {
             width: 100%;
             height: 100%;
-            object-fit: contain; /* 适配尺寸，避免拉伸，比cover更省资源 */
-            background: #000;
-            /* 硬件加速：提升解码/播放流畅度 */
-            transform: translateZ(0);
-            -webkit-transform: translateZ(0);
         }
-        /* 加载提示：让用户知道视频在缓冲 */
-        .loading-tip {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #fff;
-            font-size: 18px;
-            z-index: 10;
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            /* 禁用iframe鼠标交互，防止手动暂停/控制 */
+            pointer-events: none;
+        }
+        /* 点击遮罩层：覆盖整个页面，捕获所有点击事件 */
+        #click-mask {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            cursor: pointer;
+            background: transparent;
         }
     </style>
 </head>
 <body>
-    <!-- 加载提示 -->
-    <div class="loading-tip" id="loadingTip">点击任意位置播放视频...</div>
-    
-    <!-- 核心视频元素：所有优化属性都在这里 -->
-    <video 
-        id="fast-video"
-        preload="metadata"  <!-- 仅预加载元数据（最快），不加载完整视频 -->
-        playsinline        <!-- 内联播放，避免全屏跳转，提升响应速度 -->
-        webkit-playsinline <!-- 适配iOS/webkit内核浏览器 -->
-        muted="false"      <!-- 强制保留声音（默认就是false，显式声明） -->
-    >
-        <!-- 本地路径转义：反斜杠→正斜杠 -->
-        <source src="视频.mp4" type="video/mp4">
-        您的浏览器不支持HTML5视频播放，请升级Chrome/Edge/Firefox！
-    </video>
+    <!-- 点击遮罩：捕获页面所有点击 -->
+    <div id="click-mask"></div>
+    <!-- 嵌入你的B站视频（已填好链接） -->
+    <div id="video-container">
+        <iframe 
+            src="https://player.bilibili.com/player.html?bvid=BV1J36dB9E12&page=1&autoplay=0" 
+            allow="autoplay; fullscreen" 
+            frameborder="0"
+        >
+        </iframe>
+    </div>
 
     <script>
-        // 获取核心元素
-        const video = document.getElementById('fast-video');
-        const loadingTip = document.getElementById('loadingTip');
-        
-        // ========== 优化点1：预加载元数据，提前获取视频信息（减少播放延迟） ==========
-        video.addEventListener('loadedmetadata', () => {
-            loadingTip.textContent = '点击任意位置播放视频（已准备就绪）';
-            // 提前缓冲一小段视频，避免点击后卡顿
-            video.buffered && video.buffer(0, 2); // 缓冲前2秒
-        });
+        const mask = document.getElementById('click-mask');
+        const iframe = document.querySelector('iframe');
+        let isPlayed = false; // 标记是否已触发播放
 
-        // ========== 优化点2：点击任意位置播放，触发渐进式加载 ==========
-        document.addEventListener('click', () => {
-            if (video.paused) {
-                // 播放请求：带错误处理，兼容浏览器策略
-                video.play().then(() => {
-                    loadingTip.style.display = 'none'; // 隐藏提示
-                    // 开启自动缓冲：保证播放流畅
-                    video.autoplay = true;
-                }).catch(err => {
-                    alert(`播放失败：${err.message}\n建议将视频放到HTML同目录，改用相对路径！`);
-                });
+        // 核心1：点击页面任意位置触发视频播放
+        mask.addEventListener('click', () => {
+            if (!isPlayed) {
+                // 将autoplay=0改为autoplay=1，触发自动播放
+                const newSrc = iframe.src.replace('autoplay=0', 'autoplay=1');
+                iframe.src = newSrc;
+                isPlayed = true;
+                // 播放后隐藏遮罩（不影响视频显示）
+                mask.style.pointerEvents = 'none';
             }
         });
 
-        // ========== 优化点3：监听缓冲状态，保证播放不卡顿 ==========
-        video.addEventListener('waiting', () => {
-            loadingTip.style.display = 'block';
-            loadingTip.textContent = '视频缓冲中...请稍等';
-        });
-        video.addEventListener('playing', () => {
-            loadingTip.style.display = 'none';
-        });
+        // 核心2：每0.5秒强制发送播放指令，禁止暂停
+        setInterval(() => {
+            iframe.contentWindow.postMessage('play', '*');
+        }, 500);
 
-        // ========== 优化点4：保留原声+音量最大化（可选） ==========
-        video.volume = 1.0; // 音量拉满（默认就是1，显式声明确保声音不被静音）
-        // 禁止静音操作，确保声音始终开启
-        video.addEventListener('volumechange', () => {
-            if (video.muted) video.muted = false;
-            if (video.volume === 0) video.volume = 1.0;
+        // 核心3：禁用右键+控制键，彻底阻断手动操作
+        document.addEventListener('contextmenu', (e) => e.preventDefault());
+        document.addEventListener('keydown', (e) => {
+            // 禁用空格（暂停）、ESC（退出全屏）、P键（暂停）等
+            if ([' ', 'Escape', 'p', 'P'].includes(e.key)) {
+                e.preventDefault();
+            }
         });
     </script>
 </body>
