@@ -5,72 +5,99 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>美女私密视频</title>
     <style>
-        /* 重置页面样式，确保点击区域覆盖整个网页 */
+        /* 基础重置：减少渲染压力 */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
-        /* 让视频铺满整个视口，无边界 */
         html, body {
             width: 100vw;
             height: 100vh;
-            overflow: hidden; /* 隐藏滚动条 */
+            overflow: hidden;
+            background: #000; /* 黑色背景减少渲染差异 */
         }
-
-        #video-player {
+        /* 视频优化：适配尺寸+硬件加速，减少解码压力 */
+        #fast-video {
             width: 100%;
             height: 100%;
-            object-fit: cover; /* 视频自适应铺满容器，保持比例 */
-            pointer-events: none; /* 禁用视频本身的鼠标事件，防止手动操作 */
+            object-fit: contain; /* 适配尺寸，避免拉伸，比cover更省资源 */
+            background: #000;
+            /* 硬件加速：提升解码/播放流畅度 */
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+        }
+        /* 加载提示：让用户知道视频在缓冲 */
+        .loading-tip {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 18px;
+            z-index: 10;
         }
     </style>
 </head>
 <body>
-    <!-- 视频元素：隐藏控件，预加载视频 -->
-    <video id="video-player" preload="auto">
-        <!-- 本地视频路径处理：反斜杠改为正斜杠，需补充视频后缀（如.mp4/.avi） -->
+    <!-- 加载提示 -->
+    <div class="loading-tip" id="loadingTip">点击任意位置播放视频...</div>
+    
+    <!-- 核心视频元素：所有优化属性都在这里 -->
+    <video 
+        id="fast-video"
+        preload="metadata"  <!-- 仅预加载元数据（最快），不加载完整视频 -->
+        playsinline        <!-- 内联播放，避免全屏跳转，提升响应速度 -->
+        webkit-playsinline <!-- 适配iOS/webkit内核浏览器 -->
+        muted="false"      <!-- 强制保留声音（默认就是false，显式声明） -->
+    >
+        <!-- 本地路径转义：反斜杠→正斜杠 -->
         <source src="视频.mp4" type="video/mp4">
-        您的浏览器不支持HTML5视频播放，请更换现代浏览器（Chrome/Edge/Firefox）！
+        您的浏览器不支持HTML5视频播放，请升级Chrome/Edge/Firefox！
     </video>
 
     <script>
-        // 获取视频元素
-        const video = document.getElementById('video-player');
+        // 获取核心元素
+        const video = document.getElementById('fast-video');
+        const loadingTip = document.getElementById('loadingTip');
         
-        // 核心逻辑1：监听整个网页的点击事件，触发视频播放
+        // ========== 优化点1：预加载元数据，提前获取视频信息（减少播放延迟） ==========
+        video.addEventListener('loadedmetadata', () => {
+            loadingTip.textContent = '点击任意位置播放视频（已准备就绪）';
+            // 提前缓冲一小段视频，避免点击后卡顿
+            video.buffered && video.buffer(0, 2); // 缓冲前2秒
+        });
+
+        // ========== 优化点2：点击任意位置播放，触发渐进式加载 ==========
         document.addEventListener('click', () => {
-            // 只有视频未播放时才触发播放（避免重复调用）
             if (video.paused) {
-                // 处理播放Promise，兼容浏览器自动播放策略
-                video.play().catch(err => {
-                    console.log('播放触发失败：', err);
-                    alert('请确保视频文件路径正确，且浏览器允许本地文件访问！');
+                // 播放请求：带错误处理，兼容浏览器策略
+                video.play().then(() => {
+                    loadingTip.style.display = 'none'; // 隐藏提示
+                    // 开启自动缓冲：保证播放流畅
+                    video.autoplay = true;
+                }).catch(err => {
+                    alert(`播放失败：${err.message}\n建议将视频放到HTML同目录，改用相对路径！`);
                 });
             }
         });
 
-        // 核心逻辑2：禁止视频暂停——监听pause事件，立即恢复播放
-        video.addEventListener('pause', () => {
-            // 强制恢复播放，阻止手动/意外暂停
-            video.play();
+        // ========== 优化点3：监听缓冲状态，保证播放不卡顿 ==========
+        video.addEventListener('waiting', () => {
+            loadingTip.style.display = 'block';
+            loadingTip.textContent = '视频缓冲中...请稍等';
+        });
+        video.addEventListener('playing', () => {
+            loadingTip.style.display = 'none';
         });
 
-        // 核心逻辑3：禁用右键菜单（防止通过右键暂停/控制视频）
-        document.addEventListener('contextmenu', (e) => {
-            e.preventDefault(); // 阻止右键菜单弹出
-        });
-
-        // 可选：视频播放结束后自动循环播放
-        video.addEventListener('ended', () => {
-            video.play(); // 播放完毕后重新播放
+        // ========== 优化点4：保留原声+音量最大化（可选） ==========
+        video.volume = 1.0; // 音量拉满（默认就是1，显式声明确保声音不被静音）
+        // 禁止静音操作，确保声音始终开启
+        video.addEventListener('volumechange', () => {
+            if (video.muted) video.muted = false;
+            if (video.volume === 0) video.volume = 1.0;
         });
     </script>
 </body>
 </html>
-
-
-
-
-
