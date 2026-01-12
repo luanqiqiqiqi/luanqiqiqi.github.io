@@ -1,89 +1,65 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>美女私密视频</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Fast HLS Video</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        html, body {
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            position: relative;
-        }
-        /* 视频容器铺满整个页面 */
-        #video-container {
-            width: 100%;
-            height: 100%;
-        }
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            /* 禁用iframe鼠标交互，防止手动暂停/控制 */
-            pointer-events: none;
-        }
-        /* 点击遮罩层：覆盖整个页面，捕获所有点击事件 */
-        #click-mask {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 100;
-            cursor: pointer;
-            background: transparent;
-        }
+        *{margin:0;padding:0;}
+        html,body{width:100%;height:100%;overflow:hidden;}
+        #v{width:100vw;height:100vh;object-fit:cover;pointer-events:none;}
+        body{touch-action:none;-webkit-touch-callout:none;}
     </style>
+    <!-- 加载最轻量的hls.js，提速加载 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.14/dist/hls.light.min.js"></script>
 </head>
-<body>
-    <!-- 点击遮罩：捕获页面所有点击 -->
-    <div id="click-mask"></div>
-    <!-- 嵌入你的B站视频（已填好链接） -->
-    <div id="video-container">
-        <iframe 
-            src="https://player.bilibili.com/player.html?bvid=BV1J36dB9E12&page=1&autoplay=0" 
-            allow="autoplay; fullscreen" 
-            frameborder="0"
-        >
-        </iframe>
-    </div>
+<body onclick="playVideo()">
+    <video id="v" autoplay muted loop playsinline></video>
 
     <script>
-        const mask = document.getElementById('click-mask');
-        const iframe = document.querySelector('iframe');
-        let isPlayed = false; // 标记是否已触发播放
-
-        // 核心1：点击页面任意位置触发视频播放
-        mask.addEventListener('click', () => {
-            if (!isPlayed) {
-                // 将autoplay=0改为autoplay=1，触发自动播放
-                const newSrc = iframe.src.replace('autoplay=0', 'autoplay=1');
-                iframe.src = newSrc;
-                isPlayed = true;
-                // 播放后隐藏遮罩（不影响视频显示）
-                mask.style.pointerEvents = 'none';
+        const v = document.getElementById('v');
+        // 初始化HLS播放（适配你的仓库地址）
+        function initHLS() {
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    maxBufferLength: 2,    // 仅缓存2秒切片，秒开播放
+                    maxMaxBufferLength: 4, // 最大缓存4秒，避免卡顿
+                    startLevel: 0,         // 优先加载最低码率，最快启动
+                    enableWorker: true,    // 开启WebWorker解码，不卡主线程
+                    lowLatencyMode: true   // 低延迟模式，极致提速
+                });
+                // 你的仓库CDN地址（已适配）
+                hls.loadSource('https://cdn.jsdelivr.net/gh/luanqiqiqi/luanqiqiqi.github.io/video.m3u8');
+                hls.attachMedia(v);
+                // 解析完成立即播放，无等待
+                hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
+                // 网络错误自动重试
+                hls.on(Hls.Events.ERROR, (e, data) => {
+                    if (data.fatal && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                        hls.startLoad();
+                    }
+                });
+            } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari/iOS原生HLS支持
+                v.src = 'https://cdn.jsdelivr.net/gh/luanqiqiqi/luanqiqiqi.github.io/video.m3u8';
+                v.addEventListener('loadedmetadata', () => v.play());
             }
-        });
+        }
 
-        // 核心2：每0.5秒强制发送播放指令，禁止暂停
-        setInterval(() => {
-            iframe.contentWindow.postMessage('play', '*');
-        }, 500);
+        // 点击任意位置解锁声音+强制播放（无法暂停）
+        function playVideo() {
+            v.play();
+            v.muted = false;
+        }
 
-        // 核心3：禁用右键+控制键，彻底阻断手动操作
-        document.addEventListener('contextmenu', (e) => e.preventDefault());
-        document.addEventListener('keydown', (e) => {
-            // 禁用空格（暂停）、ESC（退出全屏）、P键（暂停）等
-            if ([' ', 'Escape', 'p', 'P'].includes(e.key)) {
-                e.preventDefault();
-            }
-        });
+        // 拦截所有暂停/停止行为，确保无法手动关闭
+        v.addEventListener('pause', () => v.play());
+        v.addEventListener('ended', () => v.play());
+        v.addEventListener('waiting', () => v.play());
+
+        // 页面加载立即初始化，无延迟
+        window.onload = initHLS;
     </script>
 </body>
 </html>
