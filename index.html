@@ -1,65 +1,78 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Fast HLS Video</title>
+    <!-- 优化GitHub Pages加载速度 + 禁用缓存 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
-        *{margin:0;padding:0;}
-        html,body{width:100%;height:100%;overflow:hidden;}
-        #v{width:100vw;height:100vh;object-fit:cover;pointer-events:none;}
-        body{touch-action:none;-webkit-touch-callout:none;}
+        * { margin: 0; padding: 0; border: 0; }
+        html, body { width: 100%; height: 100%; overflow: hidden; }
+        #video-player { 
+            width: 100vw; 
+            height: 100vh; 
+            object-fit: cover;
+            pointer-events: none; /* 禁用视频自身交互 */
+        }
     </style>
-    <!-- 加载最轻量的hls.js，提速加载 -->
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.14/dist/hls.light.min.js"></script>
+    <!-- 优先使用GitHub Pages就近CDN加载hls.js，速度更快 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.14/dist/hls.min.js"></script>
+    <title>GitHub根目录M3U8播放器</title>
 </head>
-<body onclick="playVideo()">
-    <video id="v" autoplay muted loop playsinline></video>
+<body>
+    <video id="video-player" preload="auto" muted></video>
 
     <script>
-        const v = document.getElementById('v');
-        // 初始化HLS播放（适配你的仓库地址）
-        function initHLS() {
-            if (Hls.isSupported()) {
-                const hls = new Hls({
-                    maxBufferLength: 2,    // 仅缓存2秒切片，秒开播放
-                    maxMaxBufferLength: 4, // 最大缓存4秒，避免卡顿
-                    startLevel: 0,         // 优先加载最低码率，最快启动
-                    enableWorker: true,    // 开启WebWorker解码，不卡主线程
-                    lowLatencyMode: true   // 低延迟模式，极致提速
-                });
-                // 你的仓库CDN地址（已适配）
-                hls.loadSource('https://cdn.jsdelivr.net/gh/luanqiqiqi/luanqiqiqi.github.io/video.m3u8');
-                hls.attachMedia(v);
-                // 解析完成立即播放，无等待
-                hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
-                // 网络错误自动重试
-                hls.on(Hls.Events.ERROR, (e, data) => {
-                    if (data.fatal && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                        hls.startLoad();
-                    }
-                });
-            } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
-                // Safari/iOS原生HLS支持
-                v.src = 'https://cdn.jsdelivr.net/gh/luanqiqiqi/luanqiqiqi.github.io/video.m3u8';
-                v.addEventListener('loadedmetadata', () => v.play());
-            }
+        const video = document.getElementById('video-player');
+        // 关键：GitHub根目录的m3u8文件相对路径（直接写文件名即可）
+        // 假设你的m3u8文件在GitHub仓库根目录，命名为video.m3u8，直接写这个路径
+        const m3u8Url = 'video.m3u8'; 
+        // 如果是自定义仓库名（非<用户名>.github.io），路径需补全：
+        // const m3u8Url = '/<你的仓库名>/video.m3u8';
+
+        // 最大化加载速度的HLS配置（适配GitHub Pages）
+        if (Hls.isSupported()) {
+            const hls = new Hls({
+                maxBufferLength: 2, // 更短缓冲，GitHub Pages加载更快
+                maxMaxBufferLength: 4,
+                startLevel: 0,
+                enableWorker: true,
+                lowLatencyMode: true,
+                // 适配GitHub Pages的跨域/缓存策略
+                xhrSetup: function(xhr, url) {
+                    xhr.withCredentials = false; // 关闭跨域凭证，加速请求
+                }
+            });
+            hls.loadSource(m3u8Url);
+            hls.attachMedia(video);
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play().catch(err => console.log('点击页面开始播放:', err));
+            });
+        } 
+        // 兼容Safari等原生支持HLS的浏览器
+        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = m3u8Url;
+            video.play().catch(err => console.log('点击页面开始播放:', err));
         }
 
-        // 点击任意位置解锁声音+强制播放（无法暂停）
-        function playVideo() {
-            v.play();
-            v.muted = false;
-        }
+        // 点击任意位置播放，禁止暂停
+        document.addEventListener('click', () => {
+            video.muted = false;
+            video.play(); // 强制播放
+        });
 
-        // 拦截所有暂停/停止行为，确保无法手动关闭
-        v.addEventListener('pause', () => v.play());
-        v.addEventListener('ended', () => v.play());
-        v.addEventListener('waiting', () => v.play());
+        // 监听暂停事件，立即恢复播放
+        video.addEventListener('pause', () => {
+            video.play();
+        });
 
-        // 页面加载立即初始化，无延迟
-        window.onload = initHLS;
+        // 禁用键盘暂停（空格等）
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.key === ' ') e.preventDefault();
+        });
     </script>
 </body>
 </html>
